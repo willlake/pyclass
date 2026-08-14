@@ -83,7 +83,7 @@ single branch, build it in place and copy the artifacts over the installed packa
 ```bash
 cd ~/Packages/pyclass
 export PYCLASS_MOCHICLASS_SOURCE=~/Packages/mochi_class_pyclass
-PYCLASS_BRANCHES=mochiclass python setup.py build_ext --inplace
+PYCLASS_BRANCHES=mochiclass python setup.py build_ext --inplace --force
 
 # resolve the installed package without importing pyclass: the checkout is on sys.path here,
 # and importing it from this directory would find the checkout instead of the installed copy
@@ -96,6 +96,26 @@ cp -r pyclass/mochiclass/data pyclass/mochiclass/external $SP/mochiclass/
 `data/` and `external/` have to travel with the `.so`: CLASS reads its `.ini`/`.pre` files and
 the HyRec tables from them at runtime. `python setup.py clean` afterwards removes the in-place
 `binding.c`, `data/` and `external/` from the checkout (they are `.gitignore`d in any case).
+
+### `--force` is not optional
+
+Without it, a change to the CLASS sources alone produces a **silently stale extension**.
+`build_class` always rebuilds `libclass.a`, but `build_ext` then decides whether to relink from
+`binding.pyx` against the existing `.so` only — `libclass.a` is not among the dependencies it
+tracks. With `binding.pyx` unchanged it reuses the cached `build/lib.*/binding*.so` and copies
+that back in place, exiting 0 with no warning. Measured on a one-line edit to
+`gravity_smg/gravity_models_smg.c`:
+
+| | md5 of `binding*.so` | edit present |
+| --- | --- | --- |
+| before the edit | `5517f5be…` | – |
+| `build_ext --inplace` after the edit | `5517f5be…` (unchanged) | no |
+| `build_ext --inplace --force` | `9543722c…` | yes |
+
+`python setup.py clean` first has the same effect, but throws away `build/` as well. Either way
+CLASS is recompiled from scratch every time — `depends/Makefile` deletes its unpacked tree at the
+end of each run — so the loop costs ~60 s regardless, and there is nothing to gain by omitting
+`--force`.
 
 ## The mochiclass local tree
 
@@ -119,3 +139,30 @@ parser without a whitelist, and `mochiclassy.py` already forwards `gravity_model
 `parameters_smg`, `expansion_model`, `expansion_smg` and `Omega_smg` verbatim. Only new *outputs*
 (exposing an smg struct field as an attribute, rather than reading it from the background table)
 would require touching `cclassy.pxd` and `binding.pyx`.
+
+## Getting a mochi_class change into cosmoprimo
+
+1. Make the change in `~/Packages/mochi_class_pyclass` — or make it in
+   `~/Packages/mochi_class_public` and port the diff across as above. Commit it there, so the
+   next port has a base to diff against.
+2. Rebuild and install, with `--force`, per *Rebuilding one branch only*. ~60 s.
+3. Check the binary actually carries the change, from **outside** the pyclass checkout — from
+   inside it, `import pyclass` finds the checkout, which has no compiled binding:
+
+   ```bash
+   cd /tmp && python -c "
+   from pyclass import mochiclass; print(mochiclass.__file__)"   # must be under site-packages
+   strings $SP/mochiclass/binding*.so | grep <something new in your change>
+   ```
+4. Run it. `cosmoprimo` is an editable install of `~/Packages/cosmoprimo`, so it needs nothing:
+
+   ```python
+   from cosmoprimo.fiducial import DESI
+   cosmo = DESI(engine='mochiclass', Omega_Lambda=0, Omega_fld=0, Omega_smg=-1,
+                gravity_model='...', parameters_smg='...',
+                expansion_model='wowa', expansion_smg='...')
+   ```
+
+A useful sanity check beyond "it ran": `pyclass/tests/tests.py::test_mochiclass`, and comparing
+`DESI(engine='mochiclass')` against `DESI(engine='class')` in plain LCDM — they agree to ~1e-7 in
+sigma8, which catches a build that came out subtly wrong rather than merely stale.
