@@ -43,6 +43,20 @@ def find_url(branch):
     return foo.url
 
 
+def find_source(branch):
+    """
+    Return where the CLASS sources of ``branch`` are to be taken from: a remote url,
+    a local tarball, or a local source directory (see :func:`pack_source`).
+    The environment variable ``PYCLASS_<BRANCH>_SOURCE`` (e.g. ``PYCLASS_MOCHICLASS_SOURCE``)
+    takes precedence over the ``source`` variable of ``pyclass/<branch>/_version.py``,
+    which itself takes precedence over its ``url``.
+    """
+    source = os.getenv('PYCLASS_{}_SOURCE'.format(branch.upper()), None)
+    if not source:
+        source = getattr(load_version(branch), 'source', None) or find_url(branch)
+    return os.path.expanduser(source)
+
+
 def find_include(branch):
     foo = load_version(branch)
     return list(getattr(foo, 'include', ['include']))
@@ -101,18 +115,58 @@ def download(url, target, authorization=None, size=None):
     return True
 
 
+# When packing a local source directory: version control, and build artifacts, which would
+# otherwise shadow the fresh compilation (make would take the stale objects as up-to-date).
+_source_exclude_dirs = ('.git', '.github', 'build', 'dist', '__pycache__', '.ipynb_checkpoints')
+_source_exclude_exts = ('.o', '.opp', '.a', '.so', '.pyc')
+
+
+def pack_source(source_dir, target):
+    """
+    Pack local ``source_dir`` into tarball ``target``, in the layout expected by
+    ``depends/Makefile``, i.e. that of a github archive: every file under a single root
+    directory. Version control and build artifacts are skipped.
+    """
+    import tarfile
+    source_dir = os.path.abspath(source_dir)
+    root = os.path.basename(source_dir)
+
+    def keep(info):
+        names = info.name.split('/')[1:]  # drop the root directory
+        if any(name in _source_exclude_dirs for name in names):
+            return None
+        if os.path.splitext(info.name)[-1] in _source_exclude_exts:
+            return None
+        return info
+
+    print('Packing {} into {}.'.format(source_dir, target))
+    with tarfile.open(target, 'w:gz') as tar:
+        tar.add(source_dir, arcname=root, filter=keep)
+
+
 def build_class(build_dir, branch='base'):
-    """Function to dowwnload CLASS from github and build the library."""
-    # latest class version and download link
-    url = find_url(branch)
-    authorization = os.getenv('AUTHORIZATION', None)
+    """Function to get CLASS (downloading it from github, or packing a local checkout) and build the library."""
+    # class version and download link, or local tarball / source directory
+    source = find_source(branch)
     depends_dir = os.path.join(package_basedir, 'depends')
     tarball = 'tmp-class-{}.tar.gz'.format(branch)
-    if not download(url, target=os.path.join(depends_dir, tarball), authorization=authorization):
-        print('\033[93mCould not access {}; skipping branch {}.\033[0m'.format(url, branch))
-        #import warnings
-        #warnings.warn('Could not access {}; skipping branch {}.'.format(url, branch))
-        return False
+    target = os.path.join(depends_dir, tarball)
+    if os.path.isdir(source):
+        pack_source(source, target)
+    elif os.path.isfile(source):
+        print('Copying {} to {}.'.format(source, target))
+        shutil.copyfile(source, target)
+    elif '://' not in source:
+        # a local path that does not exist: a missing branch is silently skipped below,
+        # so a typo would otherwise yield a build with no extension for this branch
+        raise ValueError('local source {} of branch {} does not exist'.format(source, branch))
+    else:
+        authorization = os.getenv('AUTHORIZATION', None)
+        if not download(source, target=target, authorization=authorization):
+            print('\033[93mCould not access {}; skipping branch {}.\033[0m'.format(source, branch))
+            #import warnings
+            #warnings.warn('Could not access {}; skipping branch {}.'.format(source, branch))
+            return False
     patch = os.path.join(os.path.join(package_basedir, package_basename, branch, 'patch'))
     args = (depends_dir, tarball, patch, os.path.abspath(build_dir), ' '.join(find_include(branch)))
     command = 'cd {}; TARBALL="{}" PATCH={} DEST={} INCLUDE="{}" make install'.format(*args)

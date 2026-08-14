@@ -12,6 +12,8 @@ Dependencies
 - cython
 
 The CLASS code will be downloaded and compiled at installation.
+A branch can also be built from a local CLASS checkout, to iterate on the C code without a
+round trip through github; see ``LOCAL_SOURCE_BUILD.md``.
 
 Installation
 ------------
