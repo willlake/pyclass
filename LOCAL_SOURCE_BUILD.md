@@ -4,6 +4,13 @@ This fork adds one capability to upstream `adematti/pyclass`: a branch can be bu
 **local CLASS source tree** instead of a tarball downloaded from github. This document records
 what changed, how to use it, and why it exists.
 
+It also repoints the default `mochiclass` url at
+[`willlake/mochi_class_pyclass`](https://github.com/willlake/mochi_class_pyclass) (pinned to a
+commit), so that a plain `pip install .` builds mochi_class **with** the hill/valley gravity model
+and no local checkout is needed. Use the local-source machinery below when you are editing the
+CLASS C sources; use the default url when you only want to *run* the model. INSTALL.md is the
+collaborator-facing version of the latter.
+
 ## Why
 
 `pyclass` does not compile any CLASS source that lives in this repository. For each branch
@@ -12,7 +19,7 @@ url declared in `pyclass/<branch>/_version.py`:
 
 ```python
 # pyclass/mochiclass/_version.py
-url = 'https://github.com/adematti/mochi_class_public/archive/v3.2.1b.tar.gz'
+url = 'https://github.com/willlake/mochi_class_pyclass/archive/4dc64e3.tar.gz'
 ```
 
 So a modification to a local mochi_class checkout — a new gravity model, say — never reaches the
