@@ -13,7 +13,7 @@ Everything else is unchanged: same API, same `binding.pyx`, and the other six br
 | | |
 | --- | --- |
 | pyclass fork | `https://github.com/willlake/pyclass.git`, branch **`local-source-build`** |
-| CLASS source it compiles | `willlake/mochi_class_pyclass` @ `4dc64e3`, pinned in `pyclass/mochiclass/_version.py` |
+| CLASS source it compiles | `willlake/mochi_class_pyclass` @ `c60748d`, pinned in `pyclass/mochiclass/_version.py` |
 | Needs at build time | a C compiler with OpenMP, `numpy`, `cython`, `requests`, and network access to github |
 
 ## Which case are you?
@@ -102,7 +102,7 @@ way it does for every other branch. Expect ~5–10 min: seven CLASS builds.
 Watch the log for the line
 
 ```
-Downloading https://github.com/willlake/mochi_class_pyclass/archive/4dc64e3.tar.gz to .../depends/tmp-class-mochiclass.tar.gz.
+Downloading https://github.com/willlake/mochi_class_pyclass/archive/c60748d.tar.gz to .../depends/tmp-class-mochiclass.tar.gz.
 ```
 
 If instead you see `Could not access ...; skipping branch mochiclass`, the download failed and

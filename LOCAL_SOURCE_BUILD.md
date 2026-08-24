@@ -19,7 +19,7 @@ url declared in `pyclass/<branch>/_version.py`:
 
 ```python
 # pyclass/mochiclass/_version.py
-url = 'https://github.com/willlake/mochi_class_pyclass/archive/4dc64e3.tar.gz'
+url = 'https://github.com/willlake/mochi_class_pyclass/archive/c60748d.tar.gz'
 ```
 
 So a modification to a local mochi_class checkout — a new gravity model, say — never reaches the
@@ -146,6 +146,45 @@ parser without a whitelist, and `mochiclassy.py` already forwards `gravity_model
 `parameters_smg`, `expansion_model`, `expansion_smg` and `Omega_smg` verbatim. Only new *outputs*
 (exposing an smg struct field as an attribute, rather than reading it from the background table)
 would require touching `cclassy.pxd` and `binding.pyx`.
+
+## Keeping the pinned commit in sync
+
+The pinned `url` is what a plain `pip install .` compiles, so it goes stale the moment a commit
+is pushed to `mochi_class_pyclass` — and the same commit is quoted in INSTALL.md and in the
+example above, which then disagree with it. `tools/sync_mochiclass_pin.py` does the bump:
+
+```bash
+cd ~/Packages/pyclass
+python tools/sync_mochiclass_pin.py            # pin HEAD of ~/Packages/mochi_class_pyclass
+```
+
+It reads the current `url` out of `pyclass/mochiclass/_version.py`, resolves the source
+checkout's HEAD, and rewrites *every tracked file of this repository* that mentions the old
+commit — so a new document quoting the pin is picked up without editing the script. It refuses
+to pin a commit that is uncommitted or not yet on a remote branch (github serves no tarball for
+those; `--allow-dirty` / `--allow-unpushed` override), and after writing, it downloads the new
+url to prove it resolves.
+
+| | |
+| --- | --- |
+| `--check` | report only, exit 1 if the pin is stale — the form to put in CI or a `pre-commit` hook |
+| `--dry-run` | print the diff, write nothing |
+| `--rev <commit>` | pin something other than HEAD |
+| `--source-repo <dir>` | pin a checkout other than `~/Packages/mochi_class_pyclass` (also `PYCLASS_MOCHICLASS_REPO`) |
+| `--rebuild` | after bumping, run the one-branch rebuild above and copy the artifacts over the installed package. Builds **from the pinned url**, so it also proves the pin compiles; `--from-local` builds from the checkout instead |
+| `--git-commit` / `--push` | commit the bump here, and push this branch |
+
+The whole loop after editing CLASS sources is then (written out step by step, from the other
+side, in `~/Packages/mochi_class_pyclass/RELEASING.md`):
+
+```bash
+cd ~/Packages/mochi_class_pyclass && git commit -am '...' && git push
+cd ~/Packages/pyclass && python tools/sync_mochiclass_pin.py --rebuild --git-commit --push
+```
+
+Files *outside* this repository that mention the old commit are reported, not rewritten —
+`mochi_class_pyclass/change_log.md` mentions past commits as history, and rewriting those would
+falsify it.
 
 ## Getting a mochi_class change into cosmoprimo
 
