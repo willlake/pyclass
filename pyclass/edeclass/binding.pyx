@@ -2155,6 +2155,36 @@ cdef class Fourier:
                        'phi': self.pt.index_tp_phi,
                        'psi': self.pt.index_tp_psi,
                        'phi_plus_psi': self.pt.index_tp_phi_plus_psi}
+            # CLASS only assigns index_tp_<name> for the sources it was actually asked to
+            # compute; the others keep their default of 0, which is itself a valid index
+            # (index_tp_delta_m, typically). Reading one of those returns a *different*
+            # transfer function with no error, and for a theta_* request the 1/(aH)**ntheta
+            # factor below then turns it into a plausible-looking but wrong spectrum -- right
+            # units for a P(k), right k-dependence, no NaNs. Resolve each name through its
+            # has_source_* flag and refuse rather than guess.
+            # delta_cb / theta_cb legitimately fall back to their delta_m / theta_m
+            # counterparts, which is what CLASS gives when there are no massive neutrinos.
+            available = {'delta_m': self.pt.has_source_delta_m == _TRUE_,
+                         'delta_cb': self.pt.has_source_delta_cb == _TRUE_ or self.pt.has_source_delta_m == _TRUE_,
+                         'theta_m': self.pt.has_source_theta_m == _TRUE_,
+                         'theta_cb': self.pt.has_source_theta_cb == _TRUE_ or self.pt.has_source_theta_m == _TRUE_,
+                         'phi': self.pt.has_source_phi == _TRUE_,
+                         'psi': self.pt.has_source_psi == _TRUE_,
+                         'phi_plus_psi': self.pt.has_source_phi_plus_psi == _TRUE_}
+            for of_ in of:
+                if of_ not in indices:
+                    raise ClassComputationError('Unknown source {!r}; expected one of {}'.format(of_, sorted(indices)))
+                if not available[of_]:
+                    raise ClassComputationError(
+                        'CLASS did not compute the source {!r}, so it cannot be returned. '
+                        'theta_m / theta_cb / phi / psi / phi_plus_psi come from the number-count '
+                        "sector: they require 'nCl' in 'output', together with "
+                        "'number_count_contributions' containing 'rsd' (for the theta_* sources) "
+                        "or 'lensing' (for phi_plus_psi). Note that passing 'output' explicitly "
+                        'replaces the default '
+                        "['dTk', 'vTk', 'tCl', 'pCl', 'lCl', 'mPk', 'nCl'] rather than adding to "
+                        'it, so an explicit output=[\'dTk\', \'vTk\', \'mPk\'] silently drops these '
+                        'sources.'.format(of_))
             index_tp1, index_tp2 = indices[of[0]], indices[of[1]]
             ntheta = sum(of_.startswith('theta_') for of_ in of)
 

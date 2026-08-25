@@ -521,6 +521,45 @@ def test_dsclass():
         pks.append(pk)
 
 
+def test_missing_source_raises():
+    """An unavailable transfer source must raise, not silently return another one.
+
+    CLASS assigns ppt->index_tp_<name> only for the sources it was asked to compute; the
+    rest keep their default of 0, which is a valid index (index_tp_delta_m). Reading one
+    unguarded therefore returned a *different* transfer function, and for a theta_*
+    request the 1/(aH)**ntheta factor in Fourier.table() turned it into a
+    plausible-looking but wrong spectrum.
+
+    Passing 'output' explicitly REPLACES pyclass' default (which carries 'nCl'), so
+    output=['dTk', 'vTk', 'mPk'] drops the number-count sector and with it theta_m /
+    theta_cb / phi / psi / phi_plus_psi. The symptom was
+    sqrt(P_theta_cb / P_delta_cb) = c/(aH) ~ 4450 Mpc at z = 0 instead of f ~ 0.53.
+    """
+    params = {'N_ncdm': 1, 'm_ncdm': [0.06], 'z_max_pk': 2., 'P_k_max_h/Mpc': 2.}
+    k, z = np.logspace(-3., -1., 20), 0.
+
+    # Default output: theta_cb is available and is a growth rate.
+    cosmo = ClassEngine(params)
+    ba, fo = Background(cosmo), Fourier(cosmo)
+    f = np.sqrt(fo.pk_kz(k, z, of='theta_cb') / fo.pk_kz(k, z, of='delta_cb'))
+    assert np.all((f > 0.3) & (f < 1.)), f
+
+    # Explicit output without 'nCl': the source does not exist, so refuse it.
+    cosmo = ClassEngine({**params, 'output': ['dTk', 'vTk', 'mPk']})
+    fo = Fourier(cosmo)
+    assert 'theta_cb' not in Transfer(cosmo).table().dtype.names
+    for of in ['theta_cb', 'theta_m', 'phi_plus_psi']:
+        try:
+            fo.pk_kz(k, z, of=of)
+        except ClassComputationError:
+            pass
+        else:
+            raise AssertionError('{} silently returned a value for of={!r}'.format(
+                'pk_kz', of))
+    # delta_cb / delta_m are unaffected: they come from 'dTk'.
+    assert np.all(fo.pk_kz(k, z, of='delta_cb') > 0.)
+
+
 if __name__ == '__main__':
 
     #test_classy()
@@ -534,6 +573,7 @@ if __name__ == '__main__':
     test_harmonic()
     test_fourier()
     test_sigma8()
+    test_missing_source_raises()
     test_axiclass()
     test_mochiclass()
     test_negnuclass()
