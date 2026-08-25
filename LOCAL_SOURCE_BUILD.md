@@ -19,7 +19,7 @@ url declared in `pyclass/<branch>/_version.py`:
 
 ```python
 # pyclass/mochiclass/_version.py
-url = 'https://github.com/willlake/mochi_class_pyclass/archive/c60748d.tar.gz'
+url = 'https://github.com/willlake/mochi_class_pyclass/archive/8102f2b.tar.gz'
 ```
 
 So a modification to a local mochi_class checkout — a new gravity model, say — never reaches the
