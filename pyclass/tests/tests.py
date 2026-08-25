@@ -536,28 +536,32 @@ def test_missing_source_raises():
     sqrt(P_theta_cb / P_delta_cb) = c/(aH) ~ 4450 Mpc at z = 0 instead of f ~ 0.53.
     """
     params = {'N_ncdm': 1, 'm_ncdm': [0.06], 'z_max_pk': 2., 'P_k_max_h/Mpc': 2.}
-    k, z = np.logspace(-3., -1., 20), 0.
 
-    # Default output: theta_cb is available and is a growth rate.
+    # Fourier.table() is the entry point that serves theta_*/phi/psi; Fourier.pk_kz()
+    # only ever returns delta_m / delta_cb (see its docstring), so it is not the API
+    # under test here.
+    # Default output: theta_cb is available, and P_theta_cb / P_delta_cb is a growth rate.
     cosmo = ClassEngine(params)
-    ba, fo = Background(cosmo), Fourier(cosmo)
-    f = np.sqrt(fo.pk_kz(k, z, of='theta_cb') / fo.pk_kz(k, z, of='delta_cb'))
-    assert np.all((f > 0.3) & (f < 1.)), f
+    fo = Fourier(cosmo)
+    ka, za, pk_tt = fo.table(of=('theta_cb', 'theta_cb'))
+    _, _, pk_dd = fo.table(of=('delta_cb', 'delta_cb'))
+    f = np.sqrt(pk_tt / pk_dd)
+    assert np.all((f > 0.3) & (f < 1.1)), (f.min(), f.max())
 
-    # Explicit output without 'nCl': the source does not exist, so refuse it.
+    # Explicit output replaces pyclass' default and so drops 'nCl'; the number-count
+    # sources are then absent and must be refused rather than silently substituted.
     cosmo = ClassEngine({**params, 'output': ['dTk', 'vTk', 'mPk']})
     fo = Fourier(cosmo)
     assert 'theta_cb' not in Transfer(cosmo).table().dtype.names
     for of in ['theta_cb', 'theta_m', 'phi_plus_psi']:
         try:
-            fo.pk_kz(k, z, of=of)
+            fo.table(of=(of, of))
         except ClassComputationError:
             pass
         else:
-            raise AssertionError('{} silently returned a value for of={!r}'.format(
-                'pk_kz', of))
-    # delta_cb / delta_m are unaffected: they come from 'dTk'.
-    assert np.all(fo.pk_kz(k, z, of='delta_cb') > 0.)
+            raise AssertionError('table() silently returned a value for of={!r}'.format(of))
+    # delta_m / delta_cb are unaffected: they come from 'dTk'.
+    assert np.all(fo.table(of=('delta_cb', 'delta_cb'))[-1] > 0.)
 
 
 if __name__ == '__main__':
